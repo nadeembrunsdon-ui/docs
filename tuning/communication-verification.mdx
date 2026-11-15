@@ -1,0 +1,159 @@
+---
+title: "Vgate, Wine and PCM Hammer communication check"
+description: "Read-only verification log for the Vgate vLinker FS adapter, the Wine COM mapping and PCM Hammer on the tuning laptop"
+---
+
+This page is the tuning log for issue BIG-5. It tracks whether the laptop, the Vgate adapter, Wine and PCM Hammer can talk to the PCM in read-only mode.
+
+<Warning>
+  **Read-only only.** Do not write, erase or flash the PCM as part of these checks. Flash preparation lives in BIG-8, which stays blocked until every check below passes.
+</Warning>
+
+A check passes only when a dated, logged result backs it. "Configured" or "previously worked" does not count as passed.
+
+## Status
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| USB VID/PID detected | Passed | 2026-11-14 19:02 log |
+| `/dev/ttyUSB0` present with `dialout` access | Passed | 2026-11-14 19:02 log |
+| Stable serial identity (by-id link) | Passed | 2026-11-14 19:02 log |
+| Same identity after unplug and reconnect | Not verified | No reconnect done yet |
+| Wine COM port maps to the adapter | Passed (configuration only) | 2026-11-14 19:02 log |
+| PCM Hammer adapter selection saved | Passed (configuration only) | 2026-11-14 19:02 log |
+| PCM Hammer starts and opens the adapter | Not verified | Historical crashes, see below |
+| Adapter compatible with selected PCM Hammer device type | Not verified | — |
+| Read-only PCM identification (ECU ID) | Not verified | — |
+| Read-only O2 sensor logging | Not verified | — |
+
+## Test setup
+
+- **Laptop:** Dell Latitude E6410, hostname `blacksheep`
+- **OS:** Linux Mint 22.3, kernel `7.0.0-42-generic`
+- **Adapter:** Vgate vLinker FS, FTDI `0403:6015`, driver `ftdi_sio`, serial `D3C6QAZC`
+- **Stable device path:** `/dev/serial/by-id/usb-www.vgatemall.com_vLinker_FS_D3C6QAZC-if00-port0`
+- **Wine prefix:** `~/.wine-pcmhammer`
+- **Installed PCM OS:** `12205612` (original, as reported)
+
+## Log
+
+### 2026-11-15 — user report
+
+The owner reported that the Vgate adapter works. No command output, timestamp, ECU ID or O2 samples came with the report, so no status changed. Attach the output from the remaining checks below to mark them as passed.
+
+### 2026-11-14 19:02 (UTC-7) — laptop diagnostics
+
+Run by the laptop-side agent. No serial ports were opened and no PCM requests were sent.
+
+Command:
+
+```bash
+hostnamectl && uname -a && lsusb && ls -l /dev/ttyUSB* 2>/dev/null && command -v codex && command -v dotnet
+```
+
+Exit code **1**. Every step succeeded except `command -v dotnet`, which found nothing.
+
+Relevant output:
+
+```text
+Operating System: Linux Mint 22.3
+          Kernel: Linux 7.0.0-42-generic
+  Hardware Model: Latitude E6410
+Bus 002 Device 008: ID 0403:6015 Future Technology Devices International, Ltd Bridge(I2C/SPI/UART/FIFO)
+crw-rw---- 1 root dialout 188, 0 Nov 14 18:59 /dev/ttyUSB0
+```
+
+Results:
+
+- **USB:** udev identifies the adapter as vLinker FS, serial `D3C6QAZC`. The kernel logged the attach at 18:59:06.
+- **Permissions:** the user is in `dialout`. Read and write permission tests returned `0`.
+- **FTDI latency timer:** reads `16`. Earlier attempts to change it failed because `sudo` needed a password. It was not changed.
+- **Wine mapping:** `COM33` and `COM34` both point to `/dev/ttyUSB0`. `COM1` points to `/dev/ttyS0`.
+- **PCM Hammer settings:** saved selection is **Serial → ObdLink or AllPro → COM33**. This confirms configuration only, not communication.
+- **Wine:** `/usr/bin/wine` and `/usr/bin/wine-stable` exist. Neither PCM Hammer nor the logger was launched.
+- **Native Linux build:** the source checkout has `Apps/UI/PcmHammerLinux/PcmHammerLinux.csproj` targeting `net10.0/linux-x64` (self-contained). No published native executable was found. `dotnet` and `mono` are not installed, so a local build is blocked.
+
+Errors and historical failures found in existing logs:
+
+- `stock-recovery-wine.log` (modified November 14): an ignored exception and a Wine loader critical-section timeout.
+- November 5 failure log: unhandled `System.AccessViolationException` with a stack through `DevicePicker.AddDiscoveredPorts`, then a stack overflow and loader timeouts.
+- System journal: a Wine core dump at November 14 01:58:48.
+
+These show that PCM Hammer has crashed under Wine before. They do not prove the cause of the latest startup failure.
+
+The full output and exit codes are in `BIG-5-diagnostic-report.txt` and `BIG-5-progress-check.txt`, attached to the issue.
+
+## Remaining checks
+
+Run these in order. Paste each command, its output, its exit code and the date into a new log entry above before you mark a check as passed.
+
+<Steps>
+  <Step title="Confirm serial identity after reconnect">
+    Unplug the adapter, wait five seconds and plug it back in. Then run:
+
+    ```bash
+    date -Is
+    lsusb -d 0403:6015
+    readlink -f /dev/serial/by-id/usb-www.vgatemall.com_vLinker_FS_D3C6QAZC-if00-port0
+    udevadm info -q property -n /dev/ttyUSB0 | grep -E 'ID_VENDOR_ID|ID_MODEL_ID|ID_SERIAL_SHORT'
+    ls -l /dev/ttyUSB*
+    journalctl -k --since "-5 min" | grep -i ftdi
+    ```
+
+    The check passes if the by-id link still resolves to the same `ttyUSB` node that Wine maps, and the serial is still `D3C6QAZC`. If the node changes (for example to `ttyUSB1`), the Wine COM mapping must change too.
+  </Step>
+  <Step title="Confirm the Wine COM mapping">
+    ```bash
+    date -Is
+    ls -l ~/.wine-pcmhammer/dosdevices/ | grep -i com
+    WINEPREFIX=~/.wine-pcmhammer wine reg query 'HKLM\Software\Wine\Ports'
+    ```
+
+    The check passes if `com33` points to `/dev/ttyUSB0` (or to the by-id path) and no registry override points it elsewhere.
+  </Step>
+  <Step title="Confirm the adapter talks ELM327 natively">
+    Before you open PCM Hammer, confirm the adapter answers on Linux with the `--self-test` and `--list-ports` options of `vgate_deep_logger.py`, then a short parked session with ignition on:
+
+    ```bash
+    python3 ~/Downloads/vgate_deep_logger.py --self-test
+    python3 ~/Downloads/vgate_deep_logger.py --list-ports
+    python3 ~/Downloads/vgate_deep_logger.py --port /dev/serial/by-id/usb-www.vgatemall.com_vLinker_FS_D3C6QAZC-if00-port0 --no-enhanced --duration 120
+    ```
+
+    This isolates adapter problems from Wine problems. Record the session folder name and any errors.
+  </Step>
+  <Step title="Start PCM Hammer and read PCM properties">
+    Close every other program that uses the adapter. Start PCM Hammer from the Wine prefix and capture its output:
+
+    ```bash
+    WINEPREFIX=~/.wine-pcmhammer wine "<path to PcmHammer.exe>" 2>&1 | tee ~/pcmhammer-$(date +%Y%m%dT%H%M%S).log
+    ```
+
+    With ignition on, use **Read Properties** only. Record the VIN, OS ID, calibration IDs, hardware ID and serial number it reports.
+
+    <Warning>
+      Do not use **Read Full Contents**, **Test Write**, **Write Calibration** or **Write Full**. Reading the full flash loads a kernel into PCM RAM and puts the PCM into programming mode. That belongs in BIG-8, not here.
+    </Warning>
+
+    The check passes if PCM Hammer reports the OS ID `12205612` (or records a different value with a note) and the log shows no errors.
+  </Step>
+  <Step title="Log O2 sensor data">
+    With the engine at idle, log O2 sensor voltages for at least two minutes, using either PCM Logger or the Python logger:
+
+    ```bash
+    python3 ~/Downloads/vgate_deep_logger.py --port /dev/serial/by-id/usb-www.vgatemall.com_vLinker_FS_D3C6QAZC-if00-port0 --no-enhanced --duration 300
+    ```
+
+    Record the session folder, the O2 channels returned and a few dated sample values per sensor. The check passes if every expected O2 sensor returns changing values. Note that P0157 (bank 2 sensor 2 low voltage) was stored in earlier logs.
+  </Step>
+</Steps>
+
+## If PCM Hammer crashes under Wine
+
+The historical crash went through `DevicePicker.AddDiscoveredPorts`, which runs while PCM Hammer enumerates serial ports. These are things to try, not confirmed fixes:
+
+- Remove the duplicate `COM34` mapping so only one COM port points at the adapter.
+- Point `COM33` at the stable by-id path instead of `/dev/ttyUSB0`.
+- Use a native self-contained Linux build of PCM Hammer instead of Wine. Building one needs the .NET 10 SDK, which is not installed.
+
+Log each attempt, its result and any changes made to the system.
