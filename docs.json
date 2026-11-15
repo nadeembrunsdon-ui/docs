@@ -11,6 +11,12 @@
   "navigation": {
     "pages": [
       {
+        "group": "Research",
+        "pages": [
+          "research/stock-4l80e-calibrations"
+        ]
+      },
+      {
         "group": "Getting Started",
         "pages": [
           "index",

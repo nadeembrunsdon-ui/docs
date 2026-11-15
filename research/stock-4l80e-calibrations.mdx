@@ -1,0 +1,70 @@
+---
+title: "Stock P01 6.0L and 4L80E calibration inventory"
+sidebarTitle: "Stock calibrations"
+description: "Compare sourced P01 stock BINs and OS-matched XDFs for a 6.0L LQ4 with a 4L80E, including compatibility gaps and the 2002 OS decision."
+keywords: ["P01", "4L80E", "LQ4", "12205612", "12202088", "12208322", "12209203", "12212156", "XDF"]
+---
+
+This inventory evaluates stock calibration evidence for the Big Blue P01 PCM, 6.0L LQ4, and 4L80E combination. It separates an available file from a calibration that is safe to flash.
+
+## Decision summary
+
+Do not approve a 2002 OS update yet. The often-proposed `12212156` is listed as a 2002 LS1 OS, while `12209203` is listed as the 2002 truck OS. No sourced `12209203` BIN in this review proves the complete 6.0L LQ4 and 4L80E combination.
+
+The strongest reference found is a stock `12202088` image from a 2001 GMC Sierra 2500 with a 6.0L LQ4, 4L80E, and 4x2 driveline. It has an OS-matched XDF, but its emissions configuration is unknown. Treat it as a comparison candidate, not a flash-approved image.
+
+## Evidence standard
+
+This page uses three states:
+
+- **Matched** means the BIN identifies the expected OS and a separately sourced XDF names the same OS.
+- **Partial** means at least one required compatibility attribute is missing or comes only from a community filename.
+- **Not approved** means the evidence does not support flashing the image to Big Blue.
+
+An OS-matched XDF is not proof that every table or parameter is correct. The XDF repository states that most definitions have not been tested by its maintainer. Review changes at the byte level and verify checksums with a second tool before any write.
+
+## Inventory
+
+| OS ID | Model use and evidence | BIN and XDF status | Compatibility result |
+| --- | --- | --- | --- |
+| `12205612` | PCM Hammer lists it as a 2000 truck OS that works with a P01. The project identifies it as Big Blue's reported original OS. | No public stock BIN or OS-matched XDF was located in the reviewed repositories. | **Not approved for tuning.** Preserve it as the recovery baseline until the original read, OS ID, segment IDs, and checksums are verified. |
+| `12202088` | PCM Hammer lists it for 2001 LS1 and truck applications. The sourced stock BIN contains VIN `1GTHC29U21E142995` and OS text `12202088`. Its companion metadata identifies a 2001 GMC Sierra 2500, 6.0L LQ4, 4L80E, 4x2, and 512 KB flash. | **Matched.** Stock BIN plus `12202088 - No Password (LRT).xdf`. | Best exact engine and transmission reference. Hardware family and image size match P01. Driveline is 4x2. Emissions equipment and certification are unknown. **Not approved for flashing.** |
+| `12208322` | PCM Hammer lists it for 2001 truck and Corvette applications. The sourced BIN contains OS text `12208322` and VIN-like text `1GCHK24U81E000000`. The repository labels it as a 2001 Silverado automatic with a 6.0L LQ4. The VIN is a placeholder with an invalid check digit, though its encoded attributes indicate a 2001 2500-series 4x4 and LQ4. | **Matched, partial vehicle evidence.** Stock-labeled BIN plus `12208322 - Phoenix V.6.0 PREFERRED.xdf`. | P01 and LQ4 evidence is present. The repository says automatic, but the image has no companion metadata proving 4L80E. Emissions are unknown. **Not approved for flashing.** |
+| `12209203` | PCM Hammer lists it as the 2002 truck OS. | **XDF only.** Several OS-matched XDFs exist, including `12209203 - Phoenix V.1.0.xdf`. No stock 6.0L and 4L80E BIN was located in the reviewed sources. | Correct OS family to research for a proposed 2002 truck update. Engine, transmission, driveline, and emissions compatibility remain unverified. **Not approved for flashing.** |
+| `12212156` | PCM Hammer lists it as the 2002 LS1 OS. A sourced 512 KB BIN contains OS text `12212156` and VIN-like text `1GBHG31R321000000`; the repository identifies a 2002 Chevrolet Express 3500, 5.7L L31, 4L80E, and 4x2. | **Matched OS, wrong donor configuration.** BIN plus `12212156 - 2002 512k MUCH BETTER (Snoman).xdf`. | P01 image size and 4L80E evidence are present, but the donor uses an L31 and van calibration. The OS family is not the documented 2002 truck OS. **Reject the currently proposed update.** |
+
+## File fingerprints
+
+Use these fingerprints to distinguish the reviewed BINs from similarly named copies.
+
+| OS ID | Reviewed BIN | MD5 | SHA-256 |
+| --- | --- | --- | --- |
+| `12202088` | `12202088_1GTHC29U21E142995.bin` | `27bcf28b45720ba064694ebc7cc6b577` | `8e7b0fa97bd662ea9a4a28aebb6445ba14502c1b11480ca0ab010aa7760cd7fe` |
+| `12208322` | `2001 Chevrolet Silverado Truck Automatic LQ4 6.0 Litre (12208322).bin` | `dcb1714dd8a0ccc82f40f07a5108dc8f` | `b51f6fd5bae102f6a6c8872008c7656b95182d4b1b62cba1646cf1020ec45c8c` |
+| `12212156` | `2002 Chevrolet Express Van L31 5.7 Litre 4L80E(12212156).bin` | `cfefc4bf9306f47a51cdb10533b77907` | `9c618d2e26ae60f9084fc122cebf66bd4034cd27286871ac547405f436630f7e` |
+
+## Compatibility gates
+
+Complete every gate before promoting a candidate from research to flash planning.
+
+1. **Recover the original.** Save at least two identical full reads of Big Blue's PCM. Record the PCM service number, hardware ID, reported OS ID, segment IDs, VIN, and cryptographic hash.
+2. **Confirm the target configuration.** Record 2WD or 4WD, axle ratio, tire size, electronic throttle or cable throttle, and every transmission-related option.
+3. **Confirm emissions content.** Match the under-hood emissions label and RPO list. Verify federal or California certification, AIR, EGR, catalyst diagnostics, rear oxygen sensors, EVAP type, fuel-tank pressure sensing, and any case learn requirements. A matching engine and transmission do not satisfy this gate.
+4. **Verify the donor.** Require a stock donor with the same engine, 4L80E, driveline, and emissions configuration. Confirm its OS and segment IDs from the file rather than its filename.
+5. **Validate the XDF.** Open an untouched donor BIN with the exact OS-matched XDF. Check several known scalars and tables against an independent definition or commercial tool. Confirm that a no-change save does not alter unrelated bytes.
+6. **Validate the image.** Verify segment checksums and compare the final file with the source. Preserve the original image and a recovery path before a full OS write.
+
+## 2002 OS evaluation
+
+`12212156` should not be the default 2002 update candidate for Big Blue. The OS matrix assigns it to 2002 LS1 applications, and the only reviewed 4L80E BIN uses a 5.7L L31 van calibration. A matching XDF only proves that the file can be interpreted with a definition intended for that OS.
+
+Research `12209203` instead because the OS matrix assigns it to 2002 trucks. Keep the update blocked until an original stock 2002 6.0L LQ4 and 4L80E donor is sourced with matching driveline and emissions content. If no exact donor can be verified, remain on the recovered original OS or evaluate the exact 2001 `12202088` donor through the same gates.
+
+## Sources
+
+- [PCM Hammer 512 KB OS list](https://github.com/PcmHammer/PcmHammer.github.io/blob/d1514c8b80ba140eae55038fbe380244f030de55/input/reference/512kb-os-list.md) for P01 compatibility and year/model OS families.
+- [Stock `12202088` LQ4/4L80E metadata](https://github.com/Snoman002/Engine-Tune-Repository-TunerPro-EFIlive-TunerCat/blob/61136c6d0d59506d60a01b4ff7176679d9903fd4/General%20Motors/P01/Software/12202088_Operating_System/12202088_1GTHC29U21E142995/readme.txt) and its [BIN](https://github.com/Snoman002/Engine-Tune-Repository-TunerPro-EFIlive-TunerCat/blob/61136c6d0d59506d60a01b4ff7176679d9903fd4/General%20Motors/P01/Software/12202088_Operating_System/12202088_1GTHC29U21E142995/12202088_1GTHC29U21E142995.bin).
+- [P01/P59 XDF repository](https://github.com/hkaase/P01P59XDFRepository/tree/336c252fbfd90fc286fb46a37cbd5fc118efca72/P01-512KB) for OS-specific definitions and the maintainer's testing disclaimer.
+- [`12202088` XDF](https://github.com/hkaase/P01P59XDFRepository/blob/336c252fbfd90fc286fb46a37cbd5fc118efca72/P01-512KB/12202088/12202088%20-%20No%20Password%20(LRT).xdf), [`12208322` preferred XDF](https://github.com/hkaase/P01P59XDFRepository/blob/336c252fbfd90fc286fb46a37cbd5fc118efca72/P01-512KB/12208322/12208322%20-%20Phoenix%20V.6.0%20PREFERRED.xdf), [`12209203` XDF](https://github.com/hkaase/P01P59XDFRepository/blob/336c252fbfd90fc286fb46a37cbd5fc118efca72/P01-512KB/12209203/12209203%20-%20Phoenix%20V.1.0.xdf), and [`12212156` XDF](https://github.com/hkaase/P01P59XDFRepository/blob/336c252fbfd90fc286fb46a37cbd5fc118efca72/P01-512KB/12212156/12212156%20-%202002%20512k%20MUCH%20BETTER%20(Snoman).xdf).
+- [Stock-labeled `12208322` LQ4 automatic BIN](https://github.com/kaivyy/ApexECUVault/blob/84a25f59ed431d2eca295e4ec9bb798fda27328c/02_CARS/GENERAL_MOTORS/GM_LS_V8_GEN3_P01_P59_BINS_XDFS/2001%20Chevrolet%20Silverado%20Truck%20Automatic%20LQ4%206.0%20Litre%20(12208322).bin) and [stock-labeled `12212156` L31/4L80E BIN](https://github.com/kaivyy/ApexECUVault/blob/84a25f59ed431d2eca295e4ec9bb798fda27328c/02_CARS/GM_CHEVROLET/LS_V8_GEN3_GEN4/.BIN%20Files/P01_512Kb/Stock/2002/Supported_OS/OS_12212156/2002%20Chevrolet%20Express%20Van%20L31%205.7%20Litre%204L80E(12212156).bin).
+- [NHTSA vPIC VIN decoder](https://vpic.nhtsa.dot.gov/decoder/) for VIN-encoded model year, vehicle, driveline, and engine attributes. Placeholder VINs remain partial evidence when their check digit is invalid.
